@@ -1,22 +1,18 @@
 from silence_tensorflow import silence_tensorflow
 silence_tensorflow()
 
-
+import argparse
 import os
 import logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 logging.getLogger('tensorflow').disabled = True
 
 import numpy as np
-from scipy.linalg import expm, sinm, cosm
-from scipy import integrate
-import random
-import matplotlib.pyplot as plt
-from skimage.util.shape import view_as_windows
 from pathlib import Path
 import tensorflow as tf
-from sklearn.metrics import average_precision_score
 import sys
+import os
+from datetime import datetime
 
 from sklearn.metrics import classification_report
 
@@ -25,36 +21,124 @@ from sklearn.metrics import classification_report
 THRESHOLD = 0.5
 tf.get_logger().setLevel('INFO')
 
+assert os.environ.get('CUDA_VISIBLE_DEVICES'), """Please use CUDA_VISIBLE_DEVICES environment variable to run the experiment
+Eg. CUDA_VISIBLE_DEVICES=1,2,3 python train.py --options"""
 
-limit = None
-epoch = 20
-num_gpu = 4
-try:
-    num_gpu = int(sys.argv[1])
-    limit = None if int(sys.argv[2]) == -1 else int(sys.argv[2])#-1 means use all
-    epoch = 2 if limit!=-1 else int(sys.argv[3])
-    mode = sys.argv[4]#either train or test
-except:
-    raise Exception(
-        f"Please Enter num_gpu 0 to 8 (default 8) as first arg, and -1 to train or any number to test the code, epoch number (20 default) and last input as mode 'train' or 'test'")
+parser = argparse.ArgumentParser()
+parser.add_argument('--version_data', required=True)
+parser.add_argument('--version_model', required=True)
+parser.add_argument('--version_catalog', required = True)
+parser.add_argument('--num_gpu', required=True, type = int)
+parser.add_argument('--sanity_check', default=1, type = int, choices=[0,1])
+parser.add_argument('--epoch', default=100, type = int)
+parser.add_argument('--sanity_epoch', default = 4, type = int)
+parser.add_argument('--train_batch_size', default=128, type = int)
+parser.add_argument('--test_batch_size', default=128, type = int)
+parser.add_argument('--mode',required=True, choices = ['train', 'test'])
+args = parser.parse_args()
 
-assert mode in ["train", "test"], "use last argument as train or test mode"
-assert num_gpu < 9, "Number of GPU should be lesser than 9"
+version_catalog = args.version_catalog
+version_data = args.version_data
+version_model = args.version_model
+train_batch_size = args.train_batch_size
+test_batch_size = args.test_batch_size
+sanity_check = args.sanity_check == 1
+
+if sanity_check:
+    print("The sanity check is enabled, running validation and training for following configs")
+    limit = max(train_batch_size, test_batch_size) * 2
+    print(f"Run for two batch, input size: {limit}")
+    print(f"Sanity Epoch Check, epoch size:  {args.sanity_epoch}")
+    print("!!!!!NOTE")
+    print("Dsiable sanity_check flags to start training")
+else:
+    print(f"The sanity check is disabled, {args.mode} starting soon")
+    limit = None
+
+num_gpu = args.num_gpu
+epoch = args.epoch if sanity_check else args.sanity_epoch
+mode = args.mode
+
+if sanity_check:    
+    cat_root = "catalog"
+    rep_root = "reports"
+else:
+    cat_root = rep_root = "temp"
+
+if sanity_check:
+    assert not Path(f"{cat_root}/version_{version_catalog}").exists(), f"version-{version_catalog} Exists in the catalog"
 
 gpulist = [f"/gpu:{i}" for i in range(num_gpu)]
 
-# strategy = tf.distribute.MultiWorkerMirroredStrategy(devices=["/gpu:0", "/gpu:1", "/gpu:2", "/gpu:3"])
 strategy = tf.distribute.MirroredStrategy(devices=gpulist)
+if sanity_check:    
+    checkpoint_root = f"/data/keshav/CACHE/version_{version_model}"
+else:
+    checkpoint_root = f"temp"
 
-checkpoint_path = f"/data/stg60/CACHE/version_0/version_milton.ckpt"
-root = Path(f"/data/stg60/DATA/version_0")
+Path(checkpoint_root).mkdir(exist_ok=True)
+
+checkpoint_path = f"{checkpoint_root}/model.ckpt"
+
+root = Path(f"/data/keshav/DATA/version_{version_data}")
+
+assert root.exists(), f"{root} doesn't exists"
+
+with open(f"{cat_root}/version_{version_catalog}.txt", "w") as f:
+    header = f"""
+    DATE : {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
+    version_catalog : {version_catalog}
+    version_data : {version_data}
+    version_model : {version_model}
+    train_batch_size : {train_batch_size}
+    test_batch_size : {test_batch_size}
+    
+    num_gpu : {num_gpu}
+    limit : {limit}
+    epoch : {epoch}
+    mode : {mode}
+    
+    checkpoint_path : {checkpoint_path}
+    
+    data_root = {root}
+
+    trainpath = {root} / 'train.npz'
+    valpath = {root} / 'val.npz'
+    testpath = {root} / 'par.npz'
+    predpath = {root} / 'pred.npz'
+    
+    """
+    
+    with open("preparedata.py", "r") as p:
+        header_ = """
+        ########################################################
+        ###############       preparedata.py       #############
+        ########################################################
+        
+        """
+        data_header = header_ + p.read()
+        
+    
+    with open("train.py", "r") as t:
+        header_ = """
+        ########################################################
+        ###############       train.py       ###################
+        ########################################################
+        
+        """
+        train_header = header_ + t.read()
+    
+    content = header + "\n" + data_header + "\n" + train_header
+    
+    f.write(content)
+
 trainpath = root / 'train.npz'
 valpath = root / 'val.npz'
 testpath = root / 'par.npz'
 predpath = root / 'pred.npz'
 
-BATCH_SIZE = 128
-TEST_BATCH_SIZE = BATCH_SIZE
+BATCH_SIZE = train_batch_size
+TEST_BATCH_SIZE = test_batch_size
 SHUFFLE_BUFFER_SIZE = BATCH_SIZE * 128
 
 print('Train Loading')
@@ -118,8 +202,20 @@ class TestResult(tf.keras.callbacks.Callback):
         target_names = ['No-Fall', 'Fall']
         print("Results on Par Set")
         report = classification_report(test_labels, y_out, target_names=target_names, zero_division = 0)
-        with open("reports/report_par_milton.txt","w") as f:
-            f.write(report)
+        
+        target_path = f"{rep_root}/version_{version_catalog}_report_par_milton.txt"
+        
+        if Path(target_path).exists():
+            curr_acc = float(report.split('\n')[5].split()[1])
+            with open(target_path,"r") as f:
+                cache_acc = float(f.readlines()[5].split()[1])
+            
+            if curr_acc>cache_acc:
+                with open(target_path,"w") as f:
+                    f.write(report)
+        else:        
+            with open(target_path,"w") as f:
+                f.write(report)
         print(report)
         
     def on_epoch_end(self, epoch, logs=None):
@@ -128,8 +224,20 @@ class TestResult(tf.keras.callbacks.Callback):
         target_names = ['No-Fall', 'Fall']
         print("Results on Pred Set")
         report = classification_report(pred_labels, y_out, target_names=target_names, zero_division = 0)
-        with open("reports/report_pred_milton.txt","w") as f:
-            f.write(report)
+        
+        target_path = f"{rep_root}/version_{version_catalog}_report_pred_milton.txt"
+        
+        if Path(target_path).exists():
+            curr_acc = float(report.split('\n')[5].split()[1])
+            with open(target_path,"r") as f:
+                cache_acc = float(f.readlines()[5].split()[1])
+            
+            if curr_acc>cache_acc:
+                with open(target_path,"w") as f:
+                    f.write(report)
+        else:        
+            with open(target_path,"w") as f:
+                f.write(report)
         print(report)
         
         
@@ -138,83 +246,43 @@ with strategy.scope():
     model = tf.keras.Sequential([
         tf.keras.layers.InputLayer(input_shape=(128, 4)),
         tf.keras.layers.LayerNormalization(
-            axis=-1, epsilon=0.1, center=True, scale=True,
+            axis=1, epsilon=1e-10, center=True, scale=True,
             beta_initializer='zeros', gamma_initializer='ones',
         ),
         
         tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True)),
         tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=False)),
         
+        tf.keras.layers.BatchNormalization(axis=-1,
+                                           momentum=0.99,
+                                           epsilon=0.001,
+                                           ),
         tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dropout(0.5),
-        tf.keras.layers.BatchNormalization(
-                                            axis=-1,
-                                            momentum=0.99,
-                                            epsilon=0.001,
-                                            center=True,
-                                            scale=True,
-                                            beta_initializer='zeros',
-                                            gamma_initializer='ones',
-                                            moving_mean_initializer='zeros',
-                                            moving_variance_initializer='ones',
-                                            beta_regularizer=None,
-                                            gamma_regularizer=None,
-                                            beta_constraint=None,
-                                            gamma_constraint=None,
-                                            ),
+        # tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.BatchNormalization(axis=-1,
+                                           momentum=0.99,
+                                           epsilon=0.001,
+                                           ),
         tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.BatchNormalization(
-                                            axis=-1,
-                                            momentum=0.99,
-                                            epsilon=0.001,
-                                            center=True,
-                                            scale=True,
-                                            beta_initializer='zeros',
-                                            gamma_initializer='ones',
-                                            moving_mean_initializer='zeros',
-                                            moving_variance_initializer='ones',
-                                            beta_regularizer=None,
-                                            gamma_regularizer=None,
-                                            beta_constraint=None,
-                                            gamma_constraint=None,
-                                            ),
+        tf.keras.layers.BatchNormalization(axis=-1,
+                                           momentum=0.99,
+                                           epsilon=0.001,
+                                           ),
         tf.keras.layers.Dense(32, activation='relu'),
-        tf.keras.layers.Dropout(0.5),
-        tf.keras.layers.BatchNormalization(
-                                            axis=-1,
-                                            momentum=0.99,
-                                            epsilon=0.001,
-                                            center=True,
-                                            scale=True,
-                                            beta_initializer='zeros',
-                                            gamma_initializer='ones',
-                                            moving_mean_initializer='zeros',
-                                            moving_variance_initializer='ones',
-                                            beta_regularizer=None,
-                                            gamma_regularizer=None,
-                                            beta_constraint=None,
-                                            gamma_constraint=None,
-                                            ),
+        # tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.BatchNormalization(axis=-1,
+                                           momentum=0.99,
+                                           epsilon=0.001,
+                                           ),
         tf.keras.layers.Dense(16, activation='relu'),
-        tf.keras.layers.BatchNormalization(
-                                            axis=-1,
-                                            momentum=0.99,
-                                            epsilon=0.001,
-                                            center=True,
-                                            scale=True,
-                                            beta_initializer='zeros',
-                                            gamma_initializer='ones',
-                                            moving_mean_initializer='zeros',
-                                            moving_variance_initializer='ones',
-                                            beta_regularizer=None,
-                                            gamma_regularizer=None,
-                                            beta_constraint=None,
-                                            gamma_constraint=None,
-                                            ),
+        tf.keras.layers.BatchNormalization(axis=-1,
+                                           momentum=0.99,
+                                           epsilon=0.001,
+                                           ),
         tf.keras.layers.Dense(1)
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.RMSprop(),
+    model.compile(optimizer=tf.keras.optimizers.SGD(),
                   loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
     metrics = ['accuracy'])
     
@@ -263,7 +331,7 @@ if mode == "train":
         
     target_names = ['No-Fall', 'Fall']
     report = classification_report(val_labels, y_out, target_names=target_names, zero_division = 0)
-    with open("reports/report_val_milton.txt","w") as f:
+    with open(f"{rep_root}/version_{version_catalog}_report_val_milton.txt","w") as f:
         f.write(report)
     print(report)
     
@@ -277,10 +345,33 @@ else:
     target_names = ['No-Fall', 'Fall']
     report = classification_report(test_labels, y_out, target_names=target_names, zero_division = 0)
     
-    with open("reports/test_report_lt10_0_85.txt","w") as f:
+    with open(f"{rep_root}/test_report_lt10_0_85.txt","w") as f:
         f.write(report)
     
     print(report)
 
 
+with open(f"{cat_root}/version_{version_catalog}.txt", "a") as f:
+    results = """
+    ########################################################################### 
+    #########################        RESULTS       ############################ 
+    ########################################################################### 
+    """
+    
+    par_path = f"{rep_root}/version_{version_catalog}_report_par_milton.txt"
+    pred_path = f"{rep_root}/version_{version_catalog}_report_pred_milton.txt"
+    val_path = f"{rep_root}/version_{version_catalog}_report_val_milton.txt"
+    
+    with open(par_path, "r") as p:
+        par_header = p.read()
+    
+    with open(pred_path, "r") as p:
+        pred_header = p.read()
+    
+    with open(val_path, "r") as p:
+        val_header = p.read()
+    
+    content = "\n" + results + "\n" + par_header + "\n" + pred_header + "\n" + val_header
+    
+    f.write(content)
 

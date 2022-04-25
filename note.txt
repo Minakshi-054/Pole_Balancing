@@ -42,3 +42,9 @@ you need to push the changes
 git add --all
 git commit -m "message"
 git push -u origin main
+
+
+# note you can log the terminal output for future reference as well
+CUDA_VISIBLE_DEVICES=1,2 python train.py --version_data 0 --version_model 0 --version_catalog 0 --num_gpu 2 --train_batch_size 128 --test_batch_size 128 --mode train --sanity_epoch 2 | tee temp/history.txt
+
+!!warninng above is for sanity check only

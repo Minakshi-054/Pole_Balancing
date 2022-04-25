@@ -3,18 +3,17 @@ from pathlib import Path
 from tqdm import tqdm
 from scipy.io import loadmat
 import random
-from itertools import islice
 import math
 from numpy import genfromtxt
 import resampy
 import matplotlib.pyplot as plt
 
 # this is not where the data is, but where we will save the process
-data_root = Path("/data/stg60/DATA/version_0")
-data_milton_par = Path("/data/stg60/newchaos/data/mats/real/Prediction_project/Milton_for_parameter_est")
-data_milton_pred = Path("/data/stg60/newchaos/data/mats/real/Prediction_project/Milton_for_prediction")
+data_root = Path("/data/keshav/DATA/version_0")
+data_milton_par = Path("/data/keshav/newchaos/data/mats/real/Prediction_project/Milton_for_parameter_est")
+data_milton_pred = Path("/data/keshav/newchaos/data/mats/real/Prediction_project/Milton_for_prediction")
 
-def read_tsv(tsv, start_index = 1024, end_index = None):
+def read_tsv(tsv, start_index = 1024, end_index = None, scale = True):
     dat = genfromtxt(tsv, delimiter='\t')
     x1,x2,x3,x4,x5,x6 = np.hsplit(dat,6)
     ell_1=((x1-x4)**2+(x2-x5)**2+(x3-x6)**2)**0.5 + 1e-10
@@ -24,6 +23,9 @@ def read_tsv(tsv, start_index = 1024, end_index = None):
     x1 = x1.reshape(-1)[start_index:end_index]
     phi = resampy.resample(phi, sr_orig = 250, sr_new = 100)
     x1 = resampy.resample(x1, sr_orig = 250, sr_new = 100)
+    if scale:
+        phi = phi/20
+        x1 = x1/0.335
     return phi, x1
 
 def strides(a, L = 128, S=1):  # Window len = L, Stride len/stepsize = S
@@ -50,7 +52,7 @@ def getAllMats(path = "/data/stg60/newchaos/data/mats/synthetic", sample = 100, 
         data = list(filter(lambda x:loadmat(x)['phiv'].max()>20 and loadmat(x)['phiv'].size>maxsize, data))
     return data
 
-def prepareData(path, cutoff = 128, delay = 23, L = 128, timetopredict = 1.96, samplingrate = 100, fall_stride = 1, start_index = 1024, end_index = None):
+def prepareData(path, cutoff = 128, delay = 23, L = 128, timetopredict = 1.96, samplingrate = 100, fall_stride = 1, start_index = 1024, end_index = None, scale = True):
     # timetopredict in seconds, note 1 point = 0.01 seconds, or 100points = 1seconds
     def disect(*args, separator = None):
         for arg in args:
@@ -63,6 +65,9 @@ def prepareData(path, cutoff = 128, delay = 23, L = 128, timetopredict = 1.96, s
         mat = loadmat(path)
         phiv = mat['phiv'].reshape(-1)
         dxv = mat['dxv'].reshape(-1)
+        if scale:
+            phiv = phiv/20
+            dxv = dxv/0.335
     elif path.suffix == ".tsv":
         phiv, dxv = read_tsv(path, start_index = start_index, end_index=end_index)
 
@@ -177,15 +182,17 @@ def create_Real_Data(data_path_list, mode = "pred"):
 #        f.write(meta)
 
 if __name__ == '__main__':
-    """
+    # """
     create_Real_Data(data_milton_pred, mode = "pred")
     create_Real_Data(data_milton_par, mode = "par")
-    """
+    # """
     
-    sim_path_list = getAllMats(sample=512)
+    sim_path_list = getAllMats(sample=2500)
+    
+    print("The sampled sim_path_list is ", len(sim_path_list))
 
-    train_path_list = sim_path_list[:-int(len(sim_path_list)*0.1)]
-    val_path_list = sim_path_list[-int(len(sim_path_list)*0.1):]
+    train_path_list = sim_path_list[:-int(len(sim_path_list)*0.05)]
+    val_path_list = sim_path_list[-int(len(sim_path_list)*0.05):]
 
     xtrain, ytrain = getOneHugeArray(train_path_list)
     print(f"The shape of xtrain is {xtrain.shape}, the ratio of fall/nofall : {ytrain.sum()/ytrain.size}")
