@@ -59,19 +59,19 @@ num_gpu = args.num_gpu
 epoch = args.epoch if sanity_check else args.sanity_epoch
 mode = args.mode
 
-if sanity_check:    
+if not sanity_check:    
     cat_root = "catalog"
     rep_root = "reports"
 else:
     cat_root = rep_root = "temp"
 
-if sanity_check:
+if not sanity_check:
     assert not Path(f"{cat_root}/version_{version_catalog}").exists(), f"version-{version_catalog} Exists in the catalog"
 
 gpulist = [f"/gpu:{i}" for i in range(num_gpu)]
 
 strategy = tf.distribute.MirroredStrategy(devices=gpulist)
-if sanity_check:    
+if not sanity_check:    
     checkpoint_root = f"/data/keshav/CACHE/version_{version_model}"
 else:
     checkpoint_root = f"temp"
