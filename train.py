@@ -18,6 +18,11 @@ from sklearn.metrics import classification_report
 
 #CUDA_VISIBLE_DEVICES=3,4,5,6,7 python train.py 2 24 222 train
 
+#add these 2 lines because  [_Derived_]RecvAsync is cancelled. [[{{node replica_2/sequential/dense_4/BiasAdd/_377}}]] 
+# [Op:__inference_predict_function_21214] error!!
+# import os
+# os.environ["TF_FORCE_GPU_ALLOW_GROWTH"]="true"
+
 THRESHOLD = 0.5
 tf.get_logger().setLevel('INFO')
 
@@ -56,7 +61,7 @@ else:
     limit = None
 
 num_gpu = args.num_gpu
-epoch = args.epoch if sanity_check else args.sanity_epoch
+epoch = args.epoch if not sanity_check else args.sanity_epoch
 mode = args.mode
 
 if not sanity_check:    
@@ -72,7 +77,7 @@ gpulist = [f"/gpu:{i}" for i in range(num_gpu)]
 
 strategy = tf.distribute.MirroredStrategy(devices=gpulist)
 if not sanity_check:    
-    checkpoint_root = f"/data/keshav/CACHE/version_{version_model}"
+    checkpoint_root = f"/home/Students/stg60/CACHE/version_{version_model}"
 else:
     checkpoint_root = f"temp"
 
@@ -80,7 +85,7 @@ Path(checkpoint_root).mkdir(exist_ok=True)
 
 checkpoint_path = f"{checkpoint_root}/model.ckpt"
 
-root = Path(f"/data/keshav/DATA/version_{version_data}")
+root = Path(f"/home/Students/stg60/DATA/version_{version_data}")
 
 assert root.exists(), f"{root} doesn't exists"
 
@@ -279,7 +284,7 @@ with strategy.scope():
                                            momentum=0.99,
                                            epsilon=0.001,
                                            ),
-        tf.keras.layers.Dense(1)
+        tf.keras.layers.Dense(1,activation='sigmoid')
     ])
 
     model.compile(optimizer=tf.keras.optimizers.SGD(),
@@ -327,6 +332,7 @@ if mode == "train":
         y_prob = tf.sigmoid(model.predict(val_examples))
         y_out = (y_prob > 0.5).numpy().astype("int32")
     except Exception as e:
+        print(e)
         sys.exit(e)
         
     target_names = ['No-Fall', 'Fall']

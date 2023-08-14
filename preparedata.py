@@ -9,9 +9,9 @@ import resampy
 import matplotlib.pyplot as plt
 
 # this is not where the data is, but where we will save the process
-data_root = Path("/data/keshav/DATA/version_0")
-data_milton_par = Path("/data/keshav/newchaos/data/mats/real/Prediction_project/Milton_for_parameter_est")
-data_milton_pred = Path("/data/keshav/newchaos/data/mats/real/Prediction_project/Milton_for_prediction")
+data_root = Path("/home/Students/stg60/DATA/version_2")
+data_milton_par = Path("/home/Students/stg60/Data/data/newmats/real/Prediction_project/Milton_for_parameter_est")
+data_milton_pred = Path("/home/Students/stg60/Data/data/newmats/real/Prediction_project/Milton_for_prediction")
 
 def read_tsv(tsv, start_index = 1024, end_index = None, scale = True):
     dat = genfromtxt(tsv, delimiter='\t')
@@ -43,9 +43,9 @@ def strides(a, L = 128, S=1):  # Window len = L, Stride len/stepsize = S
         windows = windows.tolist()
     return windows
 
-def getAllMats(path = "/data/stg60/newchaos/data/mats/synthetic", sample = 100, filter_required = True, L = 128, timetopredict = 1.96, samplingrate = 100):
+def getAllMats(path = "/data/stg60/newchaos/data/mats/synthetic/folder002/", sample = None, filter_required = True, L = 128, timetopredict = 1.96, samplingrate = 100):
     maxsize = int(timetopredict*samplingrate) + L*4 + 1
-    data = sorted(Path(path).glob('*/*.mat'))
+    data = sorted(Path(path).glob("milton*.mat"))
     if sample:
         data = random.sample(data, sample)
     if filter_required:
@@ -53,6 +53,25 @@ def getAllMats(path = "/data/stg60/newchaos/data/mats/synthetic", sample = 100, 
     return data
 
 def prepareData(path, cutoff = 128, delay = 23, L = 128, timetopredict = 1.96, samplingrate = 100, fall_stride = 1, start_index = 1024, end_index = None, scale = True):
+    """AI is creating summary for prepareData
+
+    Args:
+        path ([Str]): [path to the original file]
+        cutoff (int, optional): [description]. Defaults to 128.
+        delay (int, optional): [description]. Defaults to 23.
+        L (int, optional): [Window size]. Defaults to 128.
+        timetopredict (float, optional): [description]. Defaults to 1.96.
+        samplingrate (int, optional): [description]. Defaults to 100.
+        fall_stride (int, optional): [description]. Defaults to 1.
+        start_index (int, optional): [description]. Defaults to 1024.
+        end_index ([type], optional): [description]. Defaults to None.
+        scale (bool, optional): [description]. Defaults to True.
+    Returns:
+        [type]: [description]
+
+    Yields:
+        [type]: [description]
+    """
     # timetopredict in seconds, note 1 point = 0.01 seconds, or 100points = 1seconds
     def disect(*args, separator = None):
         for arg in args:
@@ -92,7 +111,7 @@ def prepareData(path, cutoff = 128, delay = 23, L = 128, timetopredict = 1.96, s
     else:
         S = math.ceil((n_delay_phiv.size - f_delay_phiv.size)/(timetopredict*samplingrate+1))
 
-    
+    #s=1 for imbalanced
     # no_fall_windows
     n_delay_phiv = strides(n_delay_phiv, L = L, S = S)
     n_respo_phiv = strides(n_respo_phiv, L = L, S = S)
@@ -187,9 +206,10 @@ if __name__ == '__main__':
     create_Real_Data(data_milton_par, mode = "par")
     # """
     
-    sim_path_list = getAllMats(sample=2500)
+    sim_path_list = getAllMats(sample=None)
     
     print("The sampled sim_path_list is ", len(sim_path_list))
+    #print(sim_path_list)
 
     train_path_list = sim_path_list[:-int(len(sim_path_list)*0.05)]
     val_path_list = sim_path_list[-int(len(sim_path_list)*0.05):]

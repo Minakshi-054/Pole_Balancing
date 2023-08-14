@@ -1,0 +1,18 @@
+The sanity check is disabled, test starting soon
+Train Loading
+Train Loaded
+Val Loading
+Val Loaded
+Test Loading
+Test Loaded
+Creating a model
+Model Evaluation Started
+              precision    recall  f1-score   support
+
+     No-Fall       0.55      0.93      0.69       207
+        Fall       0.72      0.20      0.31       197
+
+    accuracy                           0.57       404
+   macro avg       0.64      0.56      0.50       404
+weighted avg       0.63      0.57      0.50       404
+

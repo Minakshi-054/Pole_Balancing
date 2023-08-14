@@ -1,0 +1,9 @@
+The sanity check is disabled, test starting soon
+Train Loading
+Train Loaded
+Val Loading
+Val Loaded
+Test Loading
+Test Loaded
+Creating a model
+Model Evaluation Started

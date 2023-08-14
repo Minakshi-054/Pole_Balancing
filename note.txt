@@ -48,3 +48,16 @@ git push -u origin main
 CUDA_VISIBLE_DEVICES=1,2 python train.py --version_data 0 --version_model 0 --version_catalog 0 --num_gpu 2 --train_batch_size 128 --test_batch_size 128 --mode train --sanity_epoch 2 | tee temp/history.txt
 
 !!warninng above is for sanity check only
+
+#without sanity check, for real data test
+CUDA_VISIBLE_DEVICES=1,2 python train_real_data.py --version_data 2 --version_model 2 --version_catalog 2 --num_gpu 2 --sanity_check 0 --train_batch_size 128 --test_batch_size 128 --mode train | tee temp/history_real1.txt
+
+CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 python train_newmilton.py --version_data 2 --version_model 2 --version_catalog 2 --num_gpu 6 --sanity_check 0 --train_batch_size 128 --test_batch_size 128 --mode train | tee temp/history_karl2.txt
+
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python karl_newtrain.py --version_data 11 --version_model 11 --version_catalog 11 --num_gpu 4 --sanity_check 0 --train_batch_size 128 --test_batch_size 128 --mode train | tee temp/historyT11.txt
+
+
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 python new_train.py --version_data 1 --version_model 1 --version_catalog 1 --num_gpu 6 --sanity_check 0 --train_batch_size 128 --test_batch_size 128 --mode train | tee temp/TL1.txt
+
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python new_train.py --version_data 1 --version_model 1 --version_catalog 1 --num_gpu 4 --sanity_check 0 --train_batch_size 128 --test_batch_size 128 --mode train | tee temp/Testu1.txt
